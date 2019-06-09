@@ -131,7 +131,20 @@ local function trace(target_filename, target_line, target_variable_name, emit)
     elseif event == 'return' then
       d_sethook(above_handler, 'c')
     else -- call or tail call
-      d_sethook(below_handler, 'r')
+      local info = d_getinfo(2, 'f')
+
+      -- if it's not a function we're tracing, we just care about returning to
+      -- the current function that we *are*
+      if untraced_functions[info.func] then
+        d_sethook(below_handler, 'r')
+      elseif not traced_functions[info.func] then
+        -- if it's not untraced and not traced, it means "we don't know" - so
+        -- fall back to above handler's logic
+
+        return above_handler() -- this needs to be a tail call so that debug.getinfo
+                               -- in above_handler works properly
+      end -- otherwise, we're calling a traced function, and we can continue
+          -- using this handler
     end
   end
 
