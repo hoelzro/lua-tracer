@@ -35,6 +35,10 @@ local function trace(target_filename, target_line, target_variable_name, emit)
   emit = emit or print
   assert(not d_gethook(), 'a debug hook is already active on this thread')
 
+  -- XXX unify these into a single table?
+  --     just use a single "traced_function" for the tracee?
+  --       (that would be a strong ref, though, and it would impede our
+  --        ability to trace multiple locations in the future)
   local untraced_functions = setmetatable({}, {__mode = 'k'})
   local traced_functions   = setmetatable({}, {__mode = 'k'})
 
@@ -64,6 +68,7 @@ local function trace(target_filename, target_line, target_variable_name, emit)
         return
       end
 
+      -- XXX I think you can use linedefined and lastlinedefined unless it's main
       local first_line = m_huge
       local last_line  = 0
 
