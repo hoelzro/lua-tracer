@@ -57,6 +57,8 @@ for i = 1, #tests do
 
   f:close()
 
+  assert(is_tracing, 'you forgot to trace something in ' .. script)
+
   f = assert(io.open('tests/' .. output, 'r'))
 
   expected = f:read '*a'
