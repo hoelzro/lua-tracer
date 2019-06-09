@@ -69,7 +69,7 @@ for i = 1, #tests do
 
   assert(got == expected)
 
-  -- XXX stop tracing
+  debug.sethook() -- poor man's "untrace"
 end
 
 -- XXX don't trace lines that aren't in the same file
