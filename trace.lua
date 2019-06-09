@@ -80,7 +80,8 @@ local function trace(target_filename, target_line, target_variable_name, emit)
 
       -- error out if this line will never come up during a hook execution
       if not info.activelines[target_line] then
-        error "target line isn't traceable"
+        untraced_functions[current_fn] = true
+        return
       end
 
       traced_functions[current_fn] = true
