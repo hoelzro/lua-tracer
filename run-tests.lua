@@ -69,7 +69,7 @@ for i = 1, #tests do
 
   got = table.concat(got, '\n') .. '\n'
 
-  assert(got == expected)
+  assert(got == expected, 'got ~= expected for ' .. script)
 
   debug.sethook() -- poor man's "untrace"
 end
