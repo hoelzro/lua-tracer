@@ -60,17 +60,19 @@ for i = 1, #tests do
 
   assert(is_tracing, 'you forgot to trace something in ' .. script)
 
-  f = assert(io.open('tests/' .. output, 'r'))
+  f = io.open('tests/' .. output, 'r')
 
-  expected = f:read '*a'
+  if f then
+    expected = f:read '*a'
 
-  f:close()
+    f:close()
 
-  tracee() -- XXX pcall?
+    tracee() -- XXX pcall?
 
-  got = table.concat(got, '\n') .. '\n'
+    got = table.concat(got, '\n') .. '\n'
 
-  assert(got == expected, 'got ~= expected for ' .. script)
+    assert(got == expected, 'got ~= expected for ' .. script)
+  end
 
   debug.sethook() -- poor man's "untrace"
 end
