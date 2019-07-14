@@ -34,41 +34,41 @@ local print  = print
 --local DEBUG = print
 local function DEBUG() end
 
-local function trace(target_filename, target_line, target_variable_name, emit)
+--[[local]] function trace(target_filename, target_line, target_variable_name, emit)
   emit = emit or print
   assert(not d_gethook(), 'a debug hook is already active on this thread')
 
-  -- XXX unify these into a single table?
-  --     just use a single "traced_function" for the tracee?
-  --       (that would be a strong ref, though, and it would impede our
-  --        ability to trace multiple locations in the future)
+  local inner_handler
+  local outer_handler
+
   local untraced_functions = setmetatable({}, {__mode = 'k'})
   local traced_functions   = setmetatable({}, {__mode = 'k'})
 
-  local level_handler
-  local below_handler
+  local function is_tracee(info)
+    local fn = info.func
 
-  -- this function does the heavy lifting - it detects
-  -- if a function being called merits further attention,
-  -- and sets the debug hook to level_handler if the function
-  -- is one that contains a line we're tracing
-  local function above_handler()
-    local info = d_getinfo(2, 'fSL')
-    local current_fn = info.func
+    if untraced_functions[fn] then
+      return false
+    elseif traced_functions[fn] then
+      return true
+    else
+      -- if we don't know anything about the current function, see if we should trace it
+      -- or not
 
-    -- if we don't know anything about the current function, see if we should trace it
-    -- or not
-    if not untraced_functions[current_fn] and not traced_functions[current_fn] then
+      DEBUG('considering', fn)
+
       -- we can't trace C functions
       if info.source == '=[C]' then
-        untraced_functions[current_fn] = true
-        return
+        DEBUG 'C function - nope'
+        untraced_functions[fn] = true
+        return false
       end
 
       -- if the function is not in our target file, ignore it
       if string.sub(info.source, 1, 1) ~= '@' or string.sub(info.source, 2) ~= target_filename then
-        untraced_functions[current_fn] = true
-        return
+        DEBUG('wrong file - nope', target_filename, info.source)
+        untraced_functions[fn] = true
+        return false
       end
 
       -- XXX I think you can use linedefined and lastlinedefined unless it's main
@@ -82,34 +82,25 @@ local function trace(target_filename, target_line, target_variable_name, emit)
 
       -- ignore functions whose line ranges don't overlap the target line
       if target_line < first_line or target_line > last_line then
-        untraced_functions[current_fn] = true
-        return
+        DEBUG 'outside of line range - nope'
+        untraced_functions[fn] = true
+        return false
       end
 
-      -- error out if this line will never come up during a hook execution
+      -- XXX error out if this line will never come up during a hook execution
       if not info.activelines[target_line] then
-        untraced_functions[current_fn] = true
-        return
+        DEBUG 'target line is not active - nope'
+        untraced_functions[fn] = true
+        return false
       end
 
-      traced_functions[current_fn] = true
+      DEBUG 'yup!'
+      traced_functions[fn] = true
+      return true
     end
-
-    -- XXX for testing
-    assert(traced_functions[current_fn] or untraced_functions[current_fn])
-
-    if untraced_functions[current_fn] then
-      return
-    end
-
-    -- if we're here, it means current_fn is a tracee
-    DEBUG 'setting level handler [1]'
-    d_sethook(level_handler, 'clr')
   end
 
-  -- this function runs when we're in a function that contains
-  -- a line we're tracing
-  --[[local]] function level_handler(event, line)
+  --[[local]] function inner_handler(event, line)
     if event == 'line' then
       if line == target_line then
         local i = 1
@@ -133,39 +124,50 @@ local function trace(target_filename, target_line, target_variable_name, emit)
         -- XXX maintain the local index of the traced variable after you've found it?
       end
     elseif event == 'return' then
-      DEBUG 'setting above handler [1]'
-      d_sethook(above_handler, 'c')
+      local info = d_getinfo(3, 'fSL') -- 3 is the function we're returning into
+
+      if not is_tracee(info) then
+        -- XXX you might need to change the mask if there's a tracee on the stack
+        DEBUG 'setting outer handler [1]'
+        d_sethook(outer_handler, 'c') -- XXX 'cr'?
+      end
     else -- call or tail call
-      local info = d_getinfo(2, 'f')
+      local info = d_getinfo(2, 'fSL') -- 2 is the function we've just called into
 
-      -- if it's not a function we're tracing, we just care about returning to
-      -- the current function that we *are*
-      if untraced_functions[info.func] then
-        DEBUG 'setting below handler [1]'
-        d_sethook(below_handler, 'r')
-      elseif not traced_functions[info.func] then
-        -- if it's not untraced and not traced, it means "we don't know" - so
-        -- fall back to above handler's logic
-
-        return above_handler() -- this needs to be a tail call so that debug.getinfo
-                               -- in above_handler works properly
-      end -- otherwise, we're calling a traced function, and we can continue
-          -- using this handler
+      if not is_tracee(info) then
+        -- XXX you might need to change the mask if there's a tracee on the stack
+        DEBUG 'setting outer handler [2]'
+        d_sethook(outer_handler, 'cr') -- XXX 'cr'?
+      end
     end
   end
 
-  -- this function runs if we're below a tracee on the call stack
-  --[[local]] function below_handler()
-    local info = d_getinfo(3, 'f') -- 3 is the function we're returning into
+  --[[local]] function outer_handler(event)
+    -- XXX most of the time, we should hit untraced_functions or traced_functions
+    -- in a lookup - how bad is it to use 'SL' in the mask vs leaving it off?
+    -- should I inline the checks to untraced_functions and traced_functions and
+    -- reinvoke d_getinfo in this case?
+    if event == 'return' then
+      local info = d_getinfo(3, 'fSL') -- 3 is the function we're returning into
 
-    if traced_functions[info.func] then
-      DEBUG 'setting level handler [2]'
-      d_sethook(level_handler, 'clr')
+      if is_tracee(info) then
+        DEBUG 'setting inner handler [1]'
+        d_sethook(inner_handler, 'clr')
+      end
+    else -- call or tail call
+      local info = d_getinfo(2, 'fSL') -- 2 is the function we've just called into
+
+      if is_tracee(info) then
+        DEBUG 'setting inner handler [2]'
+        d_sethook(inner_handler, 'clr')
+      end
     end
   end
 
-  DEBUG 'setting above handler [2]'
-  d_sethook(above_handler, 'c')
+  -- XXX you might need to change the mask if there's a tracee on the stack
+  --     you might need to change the hook to inner_handler if our caller is a tracee
+  DEBUG 'setting outer handler[3]'
+  d_sethook(outer_handler, 'c')
 end
 
 return trace
