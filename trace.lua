@@ -31,6 +31,9 @@ local assert = assert
 local pairs  = pairs
 local print  = print
 
+--local DEBUG = print
+local function DEBUG() end
+
 local function trace(target_filename, target_line, target_variable_name, emit)
   emit = emit or print
   assert(not d_gethook(), 'a debug hook is already active on this thread')
@@ -100,6 +103,7 @@ local function trace(target_filename, target_line, target_variable_name, emit)
     end
 
     -- if we're here, it means current_fn is a tracee
+    DEBUG 'setting level handler [1]'
     d_sethook(level_handler, 'clr')
   end
 
@@ -129,6 +133,7 @@ local function trace(target_filename, target_line, target_variable_name, emit)
         -- XXX maintain the local index of the traced variable after you've found it?
       end
     elseif event == 'return' then
+      DEBUG 'setting above handler [1]'
       d_sethook(above_handler, 'c')
     else -- call or tail call
       local info = d_getinfo(2, 'f')
@@ -136,6 +141,7 @@ local function trace(target_filename, target_line, target_variable_name, emit)
       -- if it's not a function we're tracing, we just care about returning to
       -- the current function that we *are*
       if untraced_functions[info.func] then
+        DEBUG 'setting below handler [1]'
         d_sethook(below_handler, 'r')
       elseif not traced_functions[info.func] then
         -- if it's not untraced and not traced, it means "we don't know" - so
@@ -153,10 +159,12 @@ local function trace(target_filename, target_line, target_variable_name, emit)
     local info = d_getinfo(3, 'f') -- 3 is the function we're returning into
 
     if traced_functions[info.func] then
+      DEBUG 'setting level handler [2]'
       d_sethook(level_handler, 'clr')
     end
   end
 
+  DEBUG 'setting above handler [2]'
   d_sethook(above_handler, 'c')
 end
 
