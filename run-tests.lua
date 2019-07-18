@@ -2,6 +2,8 @@ local lfs = require 'lfs'
 
 local trace = require 'trace'
 
+local find_tracepoints = require 'tools.find_tracepoints'
+
 -- XXX deterministic test order?
 local function gather_tests()
   local tests = {}
@@ -27,38 +29,19 @@ for i = 1, #tests do
   -- XXX invoke in a subprocess?
   local tracee = assert(loadfile('tests/' .. script))
 
-  local f = assert(io.open('tests/' .. script, 'r'))
+  local tracepoints = assert(find_tracepoints('tests/' .. script))
 
-  local is_tracing = false
+  assert(#tracepoints > 0, 'you forgot to trace something in ' .. script)
+  assert(#tracepoints == 1, 'tracing multiple variables is not yet implemented')
 
   local got = {}
   local function emit(name, value)
     got[#got + 1] = name .. '\t' .. tostring(value)
   end
 
-  local line_no = 1
-  for line in f:lines() do
-    local trace_var = string.match(line, '--%s*trace:%s*(%w+)%s*$')
-
-    if trace_var then
-      if is_tracing then
-        error 'tracing multiple variable is not yet implemented'
-      end
-
-      is_tracing = true
-
-      -- XXX I'd rather load up a table of locations to trace...
-      trace('tests/' .. script, line_no, trace_var, emit)
-    elseif string.match(line, '--%s*trace:') then
-      error(string.format("%q looks like a trace comment, but it doesn't match the pattern", line))
-    end
-
-    line_no = line_no + 1
+  for i = 1, #tracepoints do
+    trace(tracepoints[i].filename, tracepoints[i].line_no, tracepoints[i].variable, emit)
   end
-
-  f:close()
-
-  assert(is_tracing, 'you forgot to trace something in ' .. script)
 
   f = io.open('tests/' .. output, 'r')
 
