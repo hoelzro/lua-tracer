@@ -129,7 +129,7 @@ local function DEBUG() end
       if not is_tracee(info) then
         -- XXX you might need to change the mask if there's a tracee on the stack
         DEBUG 'setting outer handler [1]'
-        d_sethook(outer_handler, 'c') -- XXX 'cr'?
+        d_sethook(outer_handler, 'cr')
       end
     else -- call or tail call
       local info = d_getinfo(2, 'fSL') -- 2 is the function we've just called into
