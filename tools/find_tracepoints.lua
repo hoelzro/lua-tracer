@@ -9,7 +9,7 @@ local function find_tracepoints(filename)
 
   local line_no = 1
   for line in f:lines() do
-    local trace_var = string.match(line, '--%s*trace:%s*(%w+)%s*$')
+    local trace_var = string.match(line, '--%s*trace:%s*([%w_]+)%s*$')
 
     if trace_var then
       tracepoints[#tracepoints + 1] = {
